@@ -817,68 +817,116 @@ function lockUI(ids,btn,locked){
 }
 
 /* ---------- Kho dữ liệu dùng chung (db nếu có, nếu không thì trên máy này) ---------- */
-const Store={mode:"local",db:null,data:{},teamsD:{},ctlD:{},subs:[],bc:null,chain:{},
+const Store={mode:"local",db:null,data:{},teamsD:{},ctlD:{},subs:[],chain:{},
   on(fn){this.subs.push(fn);fn(this.data);},
-  emit(){this.subs.forEach(f=>{try{f(this.data);}catch(e){}});},
+  emit(){this.subs.forEach(f=>{try{f(this.data);}catch(e){console.error(e);}});},
   merge(){this.data=Object.assign({},this.teamsD,{ctl:this.ctlD});},
-  setMode(m,wait){this.mode=m;const txt=m==="db"?"Đồng bộ cả lớp":wait?"Đang kết nối…":"CHƯA ĐỒNG BỘ · chỉ trên máy này";
-    ["#sync","#sync2"].forEach(id=>{const e=$(id);if(!e)return;e.classList.toggle("on",m==="db");e.classList.toggle("off",m!=="db"&&!wait);(e.querySelector("span:last-child")||e).textContent=txt;});},
-  readLocal(){let o={};try{o=JSON.parse(localStorage.getItem("adv-teams")||"{}")||{};}catch(e){}
-    this.teamsD={};["1","2","3","4"].forEach(k=>{if(o[k])this.teamsD[k]=o[k];});this.ctlD=o.ctl||{};this.merge();},
-  persist(){try{localStorage.setItem("adv-teams",JSON.stringify(this.data));if(this.bc)this.bc.postMessage(1);}catch(e){}},
+  setMode(m,wait){
+    this.mode=m;
+    const txt=m==="db"?"Đồng bộ Firebase":wait?"Đang kết nối Firebase…":"CHƯA ĐỒNG BỘ · chỉ trên máy này";
+    ["#sync","#sync2"].forEach(id=>{
+      const e=$(id);if(!e)return;
+      e.classList.toggle("on",m==="db");
+      e.classList.toggle("off",m!=="db"&&!wait);
+      (e.querySelector("span:last-child")||e).textContent=txt;
+    });
+  },
+  readLocal(){
+    let o={};try{o=JSON.parse(localStorage.getItem("adv-teams")||"{}")||{};}catch(e){}
+    this.teamsD={};["1","2","3","4"].forEach(k=>{if(o[k])this.teamsD[k]=o[k];});
+    this.ctlD=o.ctl||{};this.merge();
+  },
+  persist(){try{localStorage.setItem("adv-teams",JSON.stringify(this.data));}catch(e){}},
   async init(){
-    this.readLocal();this.setMode("local");
-    try{this.bc=new BroadcastChannel("adv-teams");this.bc.onmessage=()=>{if(this.mode==="local"){this.readLocal();this.emit();}};}catch(e){}
-    window.addEventListener("storage",e=>{if(e.key==="adv-teams"&&this.mode==="local"){this.readLocal();this.emit();}});
-    /* kết nối db: chờ tối đa 15 giây, nếu muộn hơn vẫn tự chuyển sang đồng bộ khi db sẵn sàng */
+    this.readLocal();
     this.setMode("local",true);
-    const attach=db=>{
-      if(!db||this.db)return;
-      this.db=db;this.setMode("db");this.teamsD={};this.ctlD={};this.merge();
-      const fail=e=>{if(e&&e.code==="unavailable"){setTimeout(sub,1500);return;}this.db=null;this.setMode("local");this.readLocal();this.emit();};
-      let u1=null,u2=null;
-      const sub=()=>{try{u1&&u1();u2&&u2();}catch(_){}
-        try{
-          u1=db.collection("teams").onSnapshot(snap=>{const d={};snap.docs.forEach(x=>{if(/^t[1-4]$/.test(x.id))d[x.id.slice(1)]=x.data();});this.teamsD=d;this.merge();this.emit();},fail);
-          u2=db.doc("class/ctl").onSnapshot(sn=>{this.ctlD=sn.exists?Object.assign({},sn.data()):{};this.merge();this.emit();},e=>{if(e&&e.code==="unavailable")setTimeout(sub,1500);});
-        }catch(e){fail(e);}};
-      sub();
-      /* dự phòng: cứ 3 giây đọc lại lệnh của giáo viên một lần để chắc chắn đồng bộ */
-      if(!this.poll)this.poll=setInterval(async()=>{if(!this.db)return;
-        try{const sn=await this.db.doc("class/ctl").get();const nd=sn.exists?sn.data():{};
-          if(JSON.stringify(nd)!==JSON.stringify(this.ctlD)&&!(this.chain.ctl&&this.pendingCtl)){this.ctlD=Object.assign({},nd);this.merge();this.emit();}
-          const ts=await this.db.collection("teams").get();const d={};ts.docs.forEach(x=>{if(/^t[1-4]$/.test(x.id))d[x.id.slice(1)]=x.data();});
-          if(JSON.stringify(d)!==JSON.stringify(this.teamsD)&&!this.pendingTeam){this.teamsD=d;this.merge();this.emit();}
-        }catch(e){}},3000);
+    const firebaseConfig={
+      apiKey:"AIzaSyAbPgVh20gZR6KuFhAazq2OhkKCvrQ_A94",
+      authDomain:"cuoc-phieu-luu-toan-hoc.firebaseapp.com",
+      databaseURL:"https://cuoc-phieu-luu-toan-hoc-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId:"cuoc-phieu-luu-toan-hoc",
+      storageBucket:"cuoc-phieu-luu-toan-hoc.firebasestorage.app",
+      messagingSenderId:"37911363355",
+      appId:"1:37911363355:web:3fe6a78a7ce76c897a5dbe"
     };
-    const t0=Date.now();
-    const tryUse=async()=>{
-      let db=null;
-      try{if(window.claude&&claude.use)db=await claude.use("db");}catch(e){db=null;}
-      if(db){attach(db);this.emit();return;}
-      this.setMode("local");this.noDb=true;this.emit();
-      try{toast("Máy này CHƯA kết nối đồng bộ. Hãy đăng nhập claude.ai bằng tài khoản có quyền chỉnh sửa/cộng tác rồi tải lại trang.");}catch(e){}
-    };
-    tryUse();
-    setTimeout(()=>{if(!this.db){this.setMode("local");this.noDb=true;this.emit();}},15000);
-    this.emit();
+    try{
+      // Tải Firebase SDK dạng CDN module, không cần npm hoặc bundler.
+      const [appSdk,dbSdk]=await Promise.all([
+        import("https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js"),
+        import("https://www.gstatic.com/firebasejs/13.2.0/firebase-database.js")
+      ]);
+      const app=appSdk.initializeApp(firebaseConfig);
+      const db=dbSdk.getDatabase(app);
+      this.db=db;this.fb=dbSdk;
+      this.setMode("db");
+      // Theo dõi trạng thái kết nối thực tế tới Firebase.
+      dbSdk.onValue(dbSdk.ref(db,".info/connected"),snap=>{
+        const connected=snap.val()===true;
+        this.setMode(connected?"db":"local",!connected);
+        if(!connected){
+          // Giữ dữ liệu hiển thị tại máy; Firebase sẽ tự phát lại dữ liệu khi kết nối lại.
+          this.emit();
+        }
+      },e=>console.error("Firebase connection status:",e));
+      // Lắng nghe dữ liệu của cả bốn đội.
+      dbSdk.onValue(dbSdk.ref(db,"class/teams"),snap=>{
+        const raw=snap.val()||{},d={};
+        ["1","2","3","4"].forEach(k=>{if(raw["t"+k])d[k]=raw["t"+k];});
+        this.teamsD=d;this.merge();this.emit();
+      },e=>{
+        console.error("Không đọc được dữ liệu đội:",e);
+        toast("Không đọc được dữ liệu đội từ Firebase. Hãy kiểm tra Rules.");
+      });
+      // Lắng nghe lệnh điều khiển của giáo viên.
+      dbSdk.onValue(dbSdk.ref(db,"class/ctl"),snap=>{
+        this.ctlD=snap.val()||{};this.merge();this.emit();
+      },e=>{
+        console.error("Không đọc được lệnh giáo viên:",e);
+        toast("Không đọc được lệnh giáo viên từ Firebase. Hãy kiểm tra Rules.");
+      });
+      this.emit();
+    }catch(e){
+      console.error("Firebase initialization failed:",e);
+      this.db=null;this.fb=null;this.setMode("local");
+      this.noDb=true;this.emit();
+      try{toast("Chưa kết nối được Firebase. Kiểm tra Internet, cấu hình và Rules.");}catch(_){}
+    }
   },
   save(team,patch){
-    this.teamsD[team]=Object.assign({},this.teamsD[team]||{},patch);this.merge();this.emit();
-    if(this.db){const ref=this.db.doc("teams/t"+team),body=this.teamsD[team];
-      this.pendingTeam=(this.pendingTeam||0)+1;this.chain[team]=(this.chain[team]||Promise.resolve()).then(()=>ref.set(body)).then(()=>{this.pendingTeam--;},e=>{this.pendingTeam--;throw e;}).catch(()=>{toast("Chưa gửi được, thử lại sau nhé");});
+    this.teamsD[team]=Object.assign({},this.teamsD[team]||{},patch);
+    this.merge();this.emit();
+    if(this.db&&this.fb){
+      const body=Object.assign({},this.teamsD[team]);
+      const path="class/teams/t"+team;
+      this.chain[team]=(this.chain[team]||Promise.resolve())
+        .then(()=>this.fb.set(this.fb.ref(this.db,path),body))
+        .catch(e=>{console.error("Firebase save team:",e);toast("Chưa gửi được câu trả lời của đội. Hãy thử lại.");});
     }else this.persist();
   },
-  saveOnce(team,key,patch){if(this.teamsD[team]&&this.teamsD[team][key])return false;this.save(team,patch);return true;},
+  saveOnce(team,key,patch){
+    if(this.teamsD[team]&&this.teamsD[team][key])return false;
+    this.save(team,patch);return true;
+  },
   saveCtl(patch){
-    this.ctlD=Object.assign({},this.ctlD,patch);this.merge();this.emit();
-    if(this.db){const body=this.ctlD;this.pendingCtl=(this.pendingCtl||0)+1;this.chain.ctl=(this.chain.ctl||Promise.resolve()).then(()=>this.db.doc("class/ctl").set(body)).then(()=>{this.pendingCtl--;},e=>{this.pendingCtl--;throw e;}).catch(()=>{toast("Chưa ghi được lệnh của giáo viên. Hãy mở app bằng tài khoản chủ của app.");});}
-    else this.persist();
+    this.ctlD=Object.assign({},this.ctlD,patch);
+    this.merge();this.emit();
+    if(this.db&&this.fb){
+      const body=Object.assign({},this.ctlD);
+      this.chain.ctl=(this.chain.ctl||Promise.resolve())
+        .then(()=>this.fb.set(this.fb.ref(this.db,"class/ctl"),body))
+        .catch(e=>{console.error("Firebase save control:",e);toast("Chưa gửi được lệnh giáo viên. Hãy kiểm tra kết nối Firebase.");});
+    }else this.persist();
   },
   async reset(){
     this.teamsD={};this.ctlD={};this.merge();this.emit();
-    if(this.db){for(const t of [1,2,3,4]){try{await this.db.doc("teams/t"+t).delete();}catch(e){}}try{await this.db.doc("class/ctl").delete();}catch(e){}}
-    else{try{localStorage.removeItem("adv-teams");if(this.bc)this.bc.postMessage(1);}catch(e){}}
+    if(this.db&&this.fb){
+      try{await this.fb.remove(this.fb.ref(this.db,"class/teams"));}
+      catch(e){console.error("Firebase reset teams:",e);}
+      try{await this.fb.remove(this.fb.ref(this.db,"class/ctl"));}
+      catch(e){console.error("Firebase reset control:",e);}
+    }else{
+      try{localStorage.removeItem("adv-teams");}catch(e){}
+    }
   }
 };
 const unl=()=>Math.max(1,+((Store.data.ctl||{}).unlocked)||1);
