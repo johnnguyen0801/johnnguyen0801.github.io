@@ -1,3 +1,4 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Cuộc phiêu lưu Toán học</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
@@ -826,6 +827,7 @@ const Sfx=(function(){
     tick(){tone(660,0,0.07,"square",0.05);},
     bad(){tone(220,0,0.18,"sawtooth",0.1);tone(165,0.16,0.28,"sawtooth",0.1);},
     boom(){tone(200,0,0.35,"sine",0.16,45);tone(900,0.02,0.25,"triangle",0.06,300);},
+    alarm6(){for(let i=0;i<6;i++){tone(880,i,0.16,"square",0.12);tone(880,i+0.24,0.16,"square",0.12);tone(587,i+0.5,0.4,"sawtooth",0.1);}},
     timeup(){[0,0.38,0.76].forEach(t=>tone(740,t,0.28,"square",0.12));tone(370,1.15,0.9,"sawtooth",0.1);},
     reveal(){[523,659,784,1046].forEach((f,i)=>tone(f,i*0.07,0.5,"sine",0.1));}
   };
@@ -1268,10 +1270,12 @@ function defFull(){return String.raw`<div class="def-card"><h3>Định nghĩa gi
       if(a.spin.at!==lastSpin){if(lastSpin)Sfx.play("send");lastSpin=a.spin.at;}
     }else sb.hidden=true;
   });
+  let alarmAt=0;
   function tickA2(){
     const a=(Store.data.ctl||{}).a2||{};let rem=a.dur||180;
     if(a.phase==="run")rem=Math.max(0,Math.ceil((a.endAt-Date.now())/1000));else if(a.phase==="ended")rem=0;
     $("#cdt").textContent=mmss(rem);
+    if(me&&a.phase!=="idle"&&a.endAt&&rem<=0&&alarmAt!==a.endAt){alarmAt=a.endAt;if(Date.now()-a.endAt<4000)Sfx.play("alarm6");}
     $("#cdbox").classList.toggle("run",a.phase==="run"&&rem>0);
     $("#cdbox").classList.toggle("end",a.phase==="ended"||(a.phase==="run"&&rem<=0));
   }
@@ -1645,7 +1649,7 @@ setInterval(()=>{
   if(!boardOn)return;const a1=(Store.data.ctl||{}).a1||{},e1=$("#b1timer");if(e1&&a1.phase==="run")e1.textContent=mmss(Math.max(0,(Date.now()-a1.startAt)/1000));const a=(Store.data.ctl||{}).a2||{},el=$("#btimer");
   if(a.phase==="run"){const rem=Math.max(0,Math.ceil((a.endAt-Date.now())/1000));
     if(el){el.textContent=mmss(rem);el.classList.toggle("end",rem<=0);}
-    if(rem<=0&&!endedHandled){endedHandled=true;Store.saveCtl({a2:Object.assign({},a,{phase:"ended"})});Sfx.play("timeup");setTimeout(openWheel,1500);}
+    if(rem<=0&&!endedHandled){endedHandled=true;Store.saveCtl({a2:Object.assign({},a,{phase:"ended"})});if(Date.now()-a.endAt<4000)Sfx.play("alarm6");}
   }
 },250);
 /* ================= NỀN MÀN HÌNH ĐĂNG NHẬP ================= */
@@ -1681,3 +1685,5 @@ const saved=+(ss("adv-me")||0);
 if(saved>=1&&saved<=4)enter(saved,false);
 })();
 </script>
+
+</body></html>
